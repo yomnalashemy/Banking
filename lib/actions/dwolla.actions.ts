@@ -55,13 +55,33 @@ export const createDwollaCustomer = async (
   newCustomer: NewDwollaCustomerParams
 ) => {
   try {
-    return await dwollaClient
-      .post("customers", newCustomer)
-      .then((res) => res.headers.get("location"));
-  } catch (err) {
+    const response = await dwollaClient.post("customers", newCustomer);
+    return response.headers.get("location");
+  } catch (err: any) {
     console.error("Creating a Dwolla Customer Failed: ", err);
+
+    // Handle Dwolla ValidationError
+    if (
+      err?.body?.code === "ValidationError" &&
+      err?.body?._embedded?.errors
+    ) {
+      for (const dwollaError of err.body._embedded.errors) {
+        const { code, message, path, _links } = dwollaError;
+
+        console.error(`Dwolla Error: ${code} - ${message} (Path: ${path})`);
+
+        // If duplicate email, return existing customer URL
+        if (code === "Duplicate" && path === "/email" && _links?.about?.href) {
+          console.warn("Dwolla customer already exists. Using existing customer URL.");
+          return _links.about.href;
+        }
+      }
+    }
+
+    throw new Error("Error creating Dwolla customer");
   }
 };
+
 
 export const createTransfer = async ({
   sourceFundingSourceUrl,
